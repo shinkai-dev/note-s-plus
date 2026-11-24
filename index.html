@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0B0F17">
+<meta name="description" content="Note S+ — IndexedDB保存・完全オフラインの高機能Markdownメモ帳">
+<title>Note S+ — オフラインメモ帳</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%236FA8FF'/%3E%3Cstop offset='1' stop-color='%239D7CFF'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='%230B0F17'/%3E%3Crect x='3' y='3' width='58' height='58' rx='12' fill='none' stroke='url(%23g)' stroke-width='2'/%3E%3Ctext x='32' y='42' font-size='26' font-weight='700' text-anchor='middle' fill='url(%23g)' font-family='sans-serif'%3ES%2B%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="./css/app.css">
+
+</head>
+<body data-theme="yoi" class="booting">
+<noscript><div style="padding:40px;font-size:15px">Note S+ には JavaScript が必要です。有効にして再読み込みしてください。</div></noscript>
+<div id="boot"><div class="boot-mark">S+</div></div>
+<div id="storageWarn" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l10 18H2L12 3z"/><path d="M12 10v4M12 17v.01"/></svg><span>永続保存（IndexedDB）が利用できません。このタブを閉じると内容は失われます。<strong>こまめにエクスポート</strong>してください。</span></div>
+
+<div id="app">
+  <aside id="sidebar">
+    <div id="brand">
+      <div class="mark">S+</div>
+      <div><div class="brand-name">Note <b>S+</b></div><div class="brand-sub">LOCAL · OFFLINE · MARKDOWN</div></div>
+      <button id="btnPalette" title="コマンドパレット (Ctrl+K)"><span class="pal-label">コマンド</span><kbd>⌘K</kbd></button>
+      <button id="btnSidebarClose" aria-label="サイドバーを閉じる" data-ic="x"></button>
+    </div>
+    <button id="btnNew"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>新規メモ <kbd>Alt+N</kbd></button>
+    <div class="search-wrap">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input id="search" type="text" placeholder="全文検索…（ / ）" autocomplete="off">
+      <button id="btnClearSearch" hidden aria-label="検索をクリア" data-ic="x"></button>
+    </div>
+    <div id="tabs">
+      <button class="tab on" data-tab="all">すべて <span class="cnt" id="cntAll">0</span></button>
+      <button class="tab" data-tab="pinned">ピン <span class="cnt" id="cntPin">0</span></button>
+      <button class="tab" data-tab="trash">ゴミ箱 <span class="cnt" id="cntTrash">0</span></button>
+    </div>
+    <div id="tagRow"></div>
+    <div class="filter-row">
+      <select id="sortSel" title="並び順">
+        <option value="updated">更新が新しい順</option>
+        <option value="created">作成が新しい順</option>
+        <option value="title">タイトル順</option>
+        <option value="chars">文字数順</option>
+        <option value="manual">手動（ドラッグ）</option>
+      </select>
+      <button id="btnSaveView" title="現在の検索・絞り込みをビューとして保存" data-ic="bookmark"></button>
+    </div>
+    <div id="viewRow" hidden></div>
+    <div class="list-head"><span id="countLabel">0件</span><label class="select-all"><input type="checkbox" id="selectAll">全選択</label></div>
+    <div id="noteList" role="list"></div>
+    <div id="bulkBar" hidden>
+      <span id="bulkCount">0件選択</span>
+      <button data-bulk="pin" title="ピン留め切替"><span data-ic="pin"></span>ピン</button>
+      <button data-bulk="md" title="Markdownでまとめて出力"><span data-ic="download"></span>MD</button>
+      <button data-bulk="json" title="JSONでまとめて出力"><span data-ic="download"></span>JSON</button>
+      <button data-bulk="restore" hidden><span data-ic="restore"></span>復元</button>
+      <button data-bulk="delete" class="danger"><span data-ic="trash"></span><span id="bulkDeleteLabel">ゴミ箱へ</span></button>
+      <button data-bulk="clear">解除</button>
+    </div>
+    <div id="sideFooter">
+      <button id="backupChip" hidden><span data-ic="alert"></span><span id="backupChipText">バックアップ推奨</span></button>
+      <div class="storage-row"><span data-ic="db"></span><div id="storageTrack"><div id="storageBar"></div></div><span id="storageText">—</span></div>
+      <div class="footer-row">
+        <span id="offlineBadge"><span class="dot"></span><span id="offlineText">ローカル保存・ネット不要</span></span>
+        <button class="icon-btn" id="btnTheme" title="テーマを切替" data-ic="palette"></button>
+        <button class="icon-btn" id="btnSettings" title="設定" data-ic="sliders"></button>
+      </div>
+    </div>
+  </aside>
+  <div id="resizer" title="ドラッグで幅を調整"></div>
+
+  <main id="main">
+    <header id="topbar">
+      <button class="icon-btn" id="btnMenu" aria-label="メモ一覧を開く" data-ic="menu"></button>
+      <input id="titleInput" type="text" placeholder="無題のメモ（未入力なら先頭行を表示）" autocomplete="off" maxlength="120">
+      <div id="modeSeg" role="group" aria-label="表示モード">
+        <button data-mode="edit" title="編集のみ (Ctrl+\)"><span data-ic="pen"></span>編集</button>
+        <button data-mode="split" class="on" title="分割表示 (Ctrl+\)"><span data-ic="cols"></span>分割</button>
+        <button data-mode="preview" title="プレビューのみ (Ctrl+\)"><span data-ic="eye"></span>閲覧</button>
+      </div>
+      <button class="icon-btn" id="btnFind" title="メモ内検索・置換 (Ctrl+F)" data-ic="search"></button>
+      <button class="icon-btn" id="btnInfo" title="ノート情報・履歴" data-ic="info"></button>
+      <button class="icon-btn" id="btnExport" title="書き出し (Ctrl+Shift+E)" data-ic="download"></button>
+      <button class="icon-btn" id="btnMore" title="その他" data-ic="dots"></button>
+      <button class="icon-btn" id="btnZen" title="集中モード" data-ic="max"></button>
+    </header>
+
+    <div id="formatBar">
+      <button class="fmt-btn" data-fmt="undo" title="元に戻す (Ctrl+Z)"><span data-ic="undo"></span></button>
+      <button class="fmt-btn" data-fmt="redo" title="やり直し (Ctrl+Shift+Z)"><span data-ic="redo"></span></button>
+      <span class="fmt-sep"></span>
+      <button class="fmt-btn" data-fmt="bold" title="太字 (Ctrl+B)"><b>B</b></button>
+      <button class="fmt-btn" data-fmt="italic" title="斜体 (Ctrl+I)"><span class="i">I</span></button>
+      <button class="fmt-btn" data-fmt="strike" title="取り消し線 (Ctrl+Shift+X)"><span class="s">S</span></button>
+      <button class="fmt-btn" data-fmt="highlight" title="ハイライト"><span class="h">==</span></button>
+      <span class="fmt-sep"></span>
+      <button class="fmt-btn" data-fmt="h1" title="見出し1"><span class="h">H1</span></button>
+      <button class="fmt-btn" data-fmt="h2" title="見出し2"><span class="h">H2</span></button>
+      <button class="fmt-btn" data-fmt="h3" title="見出し3"><span class="h">H3</span></button>
+      <span class="fmt-sep"></span>
+      <button class="fmt-btn" data-fmt="ul" title="箇条書き"><span data-ic="list"></span></button>
+      <button class="fmt-btn" data-fmt="ol" title="番号付きリスト"><span class="h">1.</span></button>
+      <button class="fmt-btn" data-fmt="task" title="チェックリスト"><span data-ic="task"></span></button>
+      <button class="fmt-btn" data-fmt="quote" title="引用"><span data-ic="quote"></span></button>
+      <span class="fmt-sep"></span>
+      <button class="fmt-btn" data-fmt="code" title="コード"><span data-ic="code"></span></button>
+      <button class="fmt-btn" data-fmt="link" title="リンク"><span data-ic="link"></span></button>
+      <button class="fmt-btn" data-fmt="table" title="表を挿入"><span data-ic="table"></span></button>
+      <button class="fmt-btn" data-fmt="hr" title="区切り線"><span data-ic="minus"></span></button>
+      <button class="fmt-btn" data-fmt="date" title="今日の日付を挿入"><span data-ic="clock"></span></button>
+    </div>
+
+    <div id="findBar" hidden>
+      <input id="findInput" type="text" placeholder="検索…" autocomplete="off">
+      <span id="findCount">0/0</span>
+      <button class="find-btn" id="findPrev" title="前へ (Shift+Enter)"><span data-ic="chevU"></span></button>
+      <button class="find-btn" id="findNext" title="次へ (Enter)"><span data-ic="chevD"></span></button>
+      <button class="find-btn" id="findCase" aria-pressed="false" title="大文字・小文字を区別">Aa</button>
+      <input id="replaceInput" type="text" placeholder="置換後…" autocomplete="off">
+      <button class="find-btn" id="btnReplace">置換</button>
+      <button class="find-btn" id="btnReplaceAll">全置換</button>
+      <span class="spacer"></span>
+      <button class="find-btn" id="btnFindClose" title="閉じる (Esc)"><span data-ic="x"></span></button>
+    </div>
+
+    <div id="workspace" class="mode-split">
+      <div id="trashBanner" hidden>
+        <span data-ic="trash"></span><span>ゴミ箱内のメモは閲覧のみです（30日後に自動で完全削除）</span><span class="grow"></span>
+        <button id="btnRestoreNote">復元する</button>
+        <button id="btnPurgeNote">今すぐ完全削除</button>
+      </div>
+      <section id="editPane" class="pane">
+        <span class="pane-tag">EDIT · MARKDOWN</span>
+        <div class="pane-inner"><textarea id="editor" spellcheck="false" placeholder="ここに書きはじめる…&#10;&#10;# 見出し、- リスト、- [ ] タスク、```コード など Markdown が使えます。&#10;入力内容は自動で IndexedDB に保存されます。"></textarea></div>
+      </section>
+      <section id="previewPane" class="pane">
+        <span class="pane-tag">PREVIEW</span>
+        <div class="pane-inner"><div id="preview" class="md-body"></div></div>
+      </section>
+      <div id="emptyState" hidden>
+        <svg class="empty-mark" viewBox="0 0 200 200" fill="none">
+          <defs><linearGradient id="eg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--accent)"/><stop offset="1" stop-color="var(--accent2)"/></linearGradient></defs>
+          <circle class="ring" cx="100" cy="100" r="76" stroke="url(#eg)" stroke-width="2.5"/>
+          <path class="plus" d="M100 78v44M78 100h44" stroke="url(#eg)" stroke-width="3" stroke-linecap="round"/>
+        </svg>
+        <div id="emptyTitle">白紙は、可能性。</div>
+        <div id="emptyMsg">最初のノートを作成しましょう。書いた瞬間から、このブラウザの中だけに保存されます。外部への通信は一切ありません。</div>
+        <button class="btn-primary" id="btnEmptyNew"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>最初のノートを書く</button>
+        <button class="btn-ghost" id="btnEmptySamples">サンプルノートを追加</button>
+      </div>
+    </div>
+
+    <footer id="statusBar">
+      <span class="st-item" id="stChars">0字</span>
+      <span class="st-item" id="stLines">0行</span>
+      <span class="st-item" id="stRead">約0分</span>
+      <span class="st-item" id="stCursor">Ln 1, Col 1</span>
+      <span class="st-item" id="stSel" hidden></span>
+      <span class="grow"></span>
+      <span class="font-step"><button id="btnFontMinus" title="文字を小さく">A−</button><button id="btnFontPlus" title="文字を大きく">A＋</button></span>
+      <span id="saveState"><span id="saveDot"></span><span id="saveText">保存済み</span></span>
+      <span id="mdBadge">MARKDOWN</span>
+    </footer>
+  </main>
+</div>
+
+<div id="scrim" hidden></div>
+<aside id="drawer" hidden>
+  <div class="drawer-head"><span data-ic="info" style="color:var(--accent)"></span><h2>ノート情報</h2><button class="icon-btn" id="drawerClose" aria-label="閉じる" data-ic="x"></button></div>
+  <div id="drawerBody"></div>
+</aside>
+<button id="zenExit" hidden><span data-ic="min"></span>集中モードを終了 <kbd>Esc</kbd></button>
+<div id="palette" hidden>
+  <div class="pal-panel">
+    <div class="pal-input-row"><span data-ic="cmd"></span><input id="palInput" type="text" placeholder="コマンド・ノートを検索…" autocomplete="off"><kbd>Esc</kbd></div>
+    <div id="palList" role="listbox"></div>
+  </div>
+</div>
+<div id="menuRoot"></div>
+<div id="modalRoot"></div>
+<div id="toasts" aria-live="polite"></div>
+
+<script src="./js/app.js" defer></script>
+</body>
+</html>
